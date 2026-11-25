@@ -63,7 +63,7 @@ function status(){const p=page(),s=p?.text||'';if(status.last!==s){status.last=s
  if(p)date.textContent=new Date(p.createdAt).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'}).toLocaleUpperCase();dirtySignal();}
 function applyAppearance(){const s=state.settings;desk.update({...s,focusMode:state.focus});editor.applySettings(s);panel.update(s);tools.classList.toggle('night',s.nightMode);for(const [k,ic,pressed,label] of [['sound',s.soundEnabled?'sound':'mute',s.soundEnabled,s.soundEnabled?'Mute sounds':'Turn sounds on'],['night',s.nightMode?'sun':'moon',s.nightMode,s.nightMode?'Day writing':'Night writing'],['focus','focus',state.focus,state.focus?'Exit Focus Mode':'Enter Focus Mode']]){const b=buttons[k];setIcon(b,ic);b.setAttribute('aria-pressed',String(pressed));b.setAttribute('aria-label',label);b.title=label;}formatButtons();}
 function setPrefs(patch){const old=state.settings;state.settings=normalizeSettings({...old,...patch});if(!state.settings.soundEnabled||old.typewriterSound!==state.settings.typewriterSound||!state.settings.soundVolume)audio.stop();state.prefRevision++;applyAppearance();schedule();}
-function select(id){editor.flushChange();const p=library.get(id);if(!p)return false;state.id=id;editor.load(p);state.prefRevision++;status();updateLibrary();schedule();return true;}
+function select(id){const p=library.get(id);if(!p)return false;state.id=id;editor.load(p);state.prefRevision++;status();updateLibrary();schedule();return true;}
 function mark(p){dirty.set(p.id,(dirty.get(p.id)||0)+1);state.status=state.available?'Saving…':'Not saved · export your writing';status();schedule();}
 function schedule(){clearTimeout(timer);timer=setTimeout(()=>{void flush();},450);}
 async function flush(){
@@ -130,7 +130,6 @@ function newLetter(data={}){const p=createPage(data);library.set(p.id,p);select(
 async function checkTrash(){try{const r=await call('cleanup');state.trashWarning=(r.warnings||[]).join('\n');const gone=new Set(r.removedIDs||[]);if(gone.size)state.deleted=state.deleted.filter(p=>!gone.has(p.id));}catch(e){state.trashWarning=e.message;}updateLibrary();}
 async function trashList(){await checkTrash();const r=await call('list',{trash:true});state.deleted=r.pages||[];state.trashWarning=[state.trashWarning,...(r.warnings||[])].filter(Boolean).join('\n');updateLibrary();}
 async function action(name,id,value){
- editor.flushChange();
  switch(name){
  case 'library':updateLibrary();panel.showLibrary();return true;
  case 'settings':panel.showSettings();return true;
@@ -203,7 +202,7 @@ function invoke(name){
  if(!ready||closing)return;
  // Saving must not swallow the next writing command or steal a newer caret.
  // Modal file actions are serialized, while editing controls stay responsive.
- if(name==='save'){editor.flushChange();void flush();return;}
+ if(name==='save'){void flush();return;}
  const run=async()=>{if(closing)return;try{await action(name)}catch(e){noticeError(e)}finally{if(!panel.isOpen()&&!$('notice').open)editor.focus();}};
  if(['bold','italic','underline','clearFormatting','focus','night','sound'].includes(name)){void run();return;}
  pendingAction=pendingAction.then(run,run);
@@ -235,9 +234,9 @@ window.addEventListener('keydown',e=>{if(!ready||e.isComposing||e.key==='Process
  if(e.ctrlKey&&!e.metaKey){if(e.altKey){if(k==='l'&&!e.getModifierState('AltGraph'))cmd='night'}else if(e.shiftKey)cmd=({o:'library',e:'export',m:'sound',f:'focus'})[k];else cmd=({o:'import',n:'new',s:'save',',':'settings','\\':'clearFormatting'})[k];}
  if(cmd){e.preventDefault();e.stopPropagation();if(!e.repeat)invoke(cmd)}
 },true);
-window.addEventListener('blur',()=>{if(ready){editor.flushChange();void flush();}});
-window.addEventListener('inkrail-flush',()=>{if(ready){editor.flushChange();void flush();}});
-window.addEventListener('inkrail-close-request',async()=>{if(closing)return;closing=true;editor.flushChange();const ok=await flush();await call(ok?'windowClosed':'windowCloseFailed').catch(()=>{});closing=false;});
+window.addEventListener('blur',()=>{if(ready)void flush();});
+window.addEventListener('inkrail-flush',()=>{if(ready)void flush();});
+window.addEventListener('inkrail-close-request',async()=>{if(closing)return;closing=true;const ok=await flush();await call(ok?'windowClosed':'windowCloseFailed').catch(()=>{});closing=false;});
 async function boot(){const data=await call('boot');state.settings=normalizeSettings(data.settings?.preferences);state.available=data.available;state.path=data.path||'';state.trashWarning=data.trashWarning||'';state.status=data.available?'Saved on this PC':'Storage unavailable · export your writing';
  for(const p of data.pages||[])loadLibraryPage(p);ready=true;applyAppearance();
  if(library.size){select(library.has(data.settings?.selectedID)?data.settings.selectedID:library.keys().next().value)}else if(state.available){newLetter({text:welcomed});await flush();}else{const p=createPage();library.set(p.id,p);select(p.id);}
