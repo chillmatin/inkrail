@@ -381,12 +381,20 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
     }
     return {length,at};
   }
+  // A one-letter range that starts where a row wraps also reports an empty box
+  // at the end of the row before it (WebKit, in long runs of plain text). The
+  // letter is the box with width.
+  function glyphRect(range) {
+    const rects=range.getClientRects();
+    for(const rect of rects) if(rect.width>0) return rect;
+    return rects[0];
+  }
   function nativeVisualRows(paragraph, firstRow,lastRow, height, leading) {
     const source=sourceUnits(paragraph), ruler=document.createRange();
     const baseline=paragraph.getBoundingClientRect().top+leading;
     const lineAt=i=>{
       ruler.setStart(...source.at(i));ruler.setEnd(...source.at(i+1));
-      const rect=ruler.getClientRects()[0];
+      const rect=glyphRect(ruler);
       if(!rect||!rect.height) return 0;
       return Math.max(0,Math.floor(((rect.top+rect.bottom)/2-baseline)/height));
     };
@@ -589,7 +597,7 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
           while(x<z) {
             const m=(x+z)>>1;
             range.setStart(...source.at(m));range.setEnd(...source.at(m+1));
-            const glyph=range.getClientRects()[0];
+            const glyph=glyphRect(range);
             if(glyph&&glyph.bottom<y)x=m+1;else z=m;
           }
           return x;
