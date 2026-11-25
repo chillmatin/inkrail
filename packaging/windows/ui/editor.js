@@ -788,11 +788,17 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
     requestAnimationFrame(()=>setTimeout(done,0));
     paintTimer=setTimeout(done,250); // No frames while hidden.
   }
+  // The page hands its text to the library at most once a second while
+  // writing: a snapshot copies the whole letter and the footer recounts it.
+  // flushChange() hands it over at once, before saving, closing or any command.
+  let changeTimer=0;
+  function emitChange() { clearTimeout(changeTimer);changeTimer=0;onChange(snapshot()); }
+  function flushChange() { if(changeTimer) emitChange(); }
   function commit(animate=false,oldTop=scroller.scrollTop,forceRender=false) {
     paintPending();
     if (page.seal && !hasLetterText(text)) displaySeal(null);
     render(forceRender);follow(animate,oldTop);updateFormat();
-    onChange(snapshot());
+    if(!changeTimer) changeTimer=setTimeout(emitChange,1000);
   }
   function replaceRange(a,b,value,m=typing,withStyle=null,newEndings=null) {
     const next=new Uint8Array(a+value.length+text.length-b);
@@ -1073,6 +1079,7 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
     displaySeal(hasLetterText(text) ? normalizeSeal(value) : null, reveal);
   }
   function load(value) {
+    clearTimeout(changeTimer);changeTimer=0;
     cancelFeed();composing=false;compositionSnapshot=null;pendingNativeCommit=null;
     const hasFocus=document.activeElement===node;
     page={...value};
@@ -1088,7 +1095,7 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
     publish();updateFormat();
   }
   applySettings();load({text:''});
-  return {element:node,scroller,load,snapshot,applySettings,command,setSeal,printContent,
+  return {element:node,scroller,load,snapshot,flushChange,applySettings,command,setSeal,printContent,
     focus(){watchSelection();node.focus({preventScroll:true});if(!composing)writeSelection();},
     activeEmphasis:active,
     destroy(){inkWindows.clear();listener.abort();observer.disconnect();cancelFeed();cancelAnimationFrame(frame);clearTimeout(timer);scroller.remove();}};
