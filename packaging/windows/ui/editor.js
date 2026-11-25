@@ -280,23 +280,10 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
       part.textContent=value.slice(start,end);segment.append(part);start=end;
     }
   }
-  // Off-screen paragraphs are not laid out or painted (content-visibility in
-  // editor.css). Until one has been shown once, it takes this estimated
-  // height: the writing fonts are monospaced, so rows follow from its length.
-  let columns=0;
-  function measureColumns() {
-    const css=getComputedStyle(node), width=node.clientWidth-parseFloat(css.paddingLeft)-parseFloat(css.paddingRight);
-    columns=Math.max(12,Math.floor(width/(amount(settings.fontSize,15,28,20)*.6)));
-  }
-  function estimate(el,chars) {
-    if(!columns)measureColumns();
-    el.style.containIntrinsicBlockSize='auto '+Math.max(1,Math.ceil(chars/columns))*lineHeight()+'px';
-  }
   function renderLine(l,index,worn) {
     const raw=l.raw, format=l.format, prefix=l.prefix;
     const line=document.createElement('div');
     line.className='ink-line'; line.dataset.index=String(index);
-    if(!prefix)estimate(line,raw.length);
     if(prefix) {
       line.classList.add('ink-block-'+prefix.kind);
       if(prefix.kind==='heading') line.style.setProperty('--heading-scale',String(l.scale));
@@ -410,7 +397,6 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
     writeSelection();scroller.scrollTop=oldScroll;
   }
   function reflow() {
-    columns=0;
     const height=scroller.clientHeight, width=scroller.clientWidth;
     const inset=topInset(height,lineHeight(),settings.paperStartPosition);
     const result={resized:height!==viewport.height||width!==viewport.width,insetDelta:inset-viewport.inset,offset:scroller.scrollTop};
@@ -445,20 +431,12 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
     }
     return {length,at};
   }
-  // A one-letter range that starts where a row wraps also reports an empty box
-  // at the end of the row before it (WebKit, in long runs of plain text). The
-  // letter is the box with width.
-  function glyphRect(range) {
-    const rects=range.getClientRects();
-    for(const rect of rects) if(rect.width>0) return rect;
-    return rects[0];
-  }
   function nativeVisualRows(paragraph, firstRow,lastRow, height, leading) {
     const source=sourceUnits(paragraph), ruler=document.createRange();
     const baseline=paragraph.getBoundingClientRect().top+leading;
     const lineAt=i=>{
       ruler.setStart(...source.at(i));ruler.setEnd(...source.at(i+1));
-      const rect=glyphRect(ruler);
+      const rect=ruler.getClientRects()[0];
       if(!rect||!rect.height) return 0;
       return Math.max(0,Math.floor(((rect.top+rect.bottom)/2-baseline)/height));
     };
@@ -679,7 +657,7 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
           while(x<z) {
             const m=(x+z)>>1;
             range.setStart(...source.at(m));range.setEnd(...source.at(m+1));
-            const glyph=glyphRect(range);
+            const glyph=range.getClientRects()[0];
             if(glyph&&glyph.bottom<y)x=m+1;else z=m;
           }
           return x;
@@ -777,19 +755,7 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
     }
     publish();
   }
-  // A held key repeats at a fixed rate whether or not the last repeat has
-  // reached the screen. Repeats that arrive before it has are dropped, so the
-  // page never falls behind the key and stops the moment the key is released.
-  let painting=false, paintTimer=0;
-  function paintPending() {
-    if(painting)return;
-    painting=true;
-    const done=()=>{painting=false;clearTimeout(paintTimer);};
-    requestAnimationFrame(()=>setTimeout(done,0));
-    paintTimer=setTimeout(done,250); // No frames while hidden.
-  }
   function commit(animate=false,oldTop=scroller.scrollTop,forceRender=false) {
-    paintPending();
     if (page.seal && !hasLetterText(text)) displaySeal(null);
     render(forceRender);follow(animate,oldTop);updateFormat();
     onChange(snapshot());
@@ -942,8 +908,6 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
   }
   function onKey(event) {
     if(composing||event.isComposing||event.keyCode===229) return;
-    if(event.repeat&&painting&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&
-      (event.key.length===1||['Backspace','Delete','Enter','Tab'].includes(event.key))) { event.preventDefault(); return; }
     const key=event.key.toLowerCase();
     if((event.ctrlKey||event.metaKey)&&!event.altKey) {
       const name=key==='z'?(event.shiftKey?'redo':'undo'):key==='y'?'redo':({b:'bold',i:'italic',u:'underline','\\':'clearFormatting'})[key];
