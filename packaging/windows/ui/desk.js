@@ -558,6 +558,8 @@ export function mountDesk(root, callbacks = {}) {
   const margin=q('margin-art'), emboss=q('emboss');
   const table=q('table'), accent=q('accent'), lamps=Array.from(shell.querySelectorAll('.ink-desk__lamp'));
   const feet=Array.from(shell.querySelectorAll('.ink-desk__foot'));
+  const curlShade=q('curl');
+  let lastRails, lastCarriage, lastCurl;
   const grain=q('grain'), material=q('material'), pools=q('pools'), edge=q('edge-light'), beam=q('lamp-tint'), veil=q('veil');
   const classicImage = new Image();
   const makerImage = new Image();
@@ -693,7 +695,12 @@ export function mountDesk(root, callbacks = {}) {
     if(!g)return;
     const feed=Math.max(0,number(caret.scrollOffset,0)), rolled=prefs.paperMotion==='roll';
     const {x,y}=callbacks.carriage ? callbacks.carriage(g) : carriagePosition(g,caret);
-    css(shell,{'--carriage-x':x+'px','--rail-y':y+'px','--curl-offset':(rolled?0:-feed)+'px'});
+    // Set these on the elements that read them. A custom property changed on
+    // the shell restyles every descendant, including each inked letter.
+    const rails=y+'px',curl=(rolled?0:-feed)+'px',carriage=x+'px';
+    if(lastRails!==rails){lastRails=rails;rail.style.setProperty('--rail-y',rails);capsule.style.setProperty('--rail-y',rails);}
+    if(lastCarriage!==carriage){lastCarriage=carriage;capsule.style.setProperty('--carriage-x',carriage);}
+    if(lastCurl!==curl){lastCurl=curl;curlShade.style.setProperty('--curl-offset',curl);}
     paintGrain(feed);
     const outlineKey=`${g.paperWidth}:${g.paperHeight}:${rolled?0:Math.min(104,feed)}:${prefs.curvedPaper!==false}`;
     if(lastFeed!==outlineKey){

@@ -840,6 +840,10 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
   }
   function onKey(event) {
     if(composing||event.isComposing||event.keyCode===229) return;
+    // Like a typewriter, a held key strikes once: no auto-repeat for keys
+    // that type or erase. Arrow keys and shortcuts still repeat.
+    if(event.repeat&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&
+      (event.key.length===1||['Backspace','Delete','Enter','Tab'].includes(event.key))) { event.preventDefault(); return; }
     const key=event.key.toLowerCase();
     if((event.ctrlKey||event.metaKey)&&!event.altKey) {
       const name=key==='z'?(event.shiftKey?'redo':'undo'):key==='y'?'redo':({b:'bold',i:'italic',u:'underline','\\':'clearFormatting'})[key];
