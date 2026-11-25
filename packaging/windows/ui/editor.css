@@ -49,6 +49,10 @@
 .ink-press{color:rgb(var(--ink-tint) / calc(var(--ink-pressure) * var(--strike)));margin-inline:var(--press-x,0px) calc(-1 * var(--press-x,0px))}
 .ink-editor-placeholder{position:absolute;pointer-events:none;user-select:none;z-index:1;font-family:var(--ink-font,monospace);font-size:var(--ink-font-size,20px);font-weight:var(--ink-weight,400);line-height:1.15;color:rgb(124 127 109 / .43);white-space:nowrap;max-width:calc(100% - 24px);overflow:hidden}
 .ink-roll-visual-line,.ink-roll-rest{display:block;unicode-bidi:isolate;min-height:1lh}
+/* Letters off screen are neither laid out nor painted while you write, so a
+   long letter costs about as much per key as a short one. Print copies drop
+   contenteditable and are always drawn in full. */
+.ink-editor[contenteditable] > .ink-line:not([class*="ink-block-"]){content-visibility:auto}
 .ink-editor.ink-editor-sealed{min-height:0;padding-bottom:0!important}
 .ink-seal-footer{display:grid;justify-items:center;padding:22px 0 32px;user-select:none;pointer-events:none}
 .ink-seal-footer[hidden]{display:none}
