@@ -280,23 +280,10 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
       part.textContent=value.slice(start,end);segment.append(part);start=end;
     }
   }
-  // Off-screen paragraphs are not laid out or painted (content-visibility in
-  // editor.css). Until one has been shown once, it takes this estimated
-  // height: the writing fonts are monospaced, so rows follow from its length.
-  let columns=0;
-  function measureColumns() {
-    const css=getComputedStyle(node), width=node.clientWidth-parseFloat(css.paddingLeft)-parseFloat(css.paddingRight);
-    columns=Math.max(12,Math.floor(width/(amount(settings.fontSize,15,28,20)*.6)));
-  }
-  function estimate(el,chars) {
-    if(!columns)measureColumns();
-    el.style.containIntrinsicBlockSize='auto '+Math.max(1,Math.ceil(chars/columns))*lineHeight()+'px';
-  }
   function renderLine(l,index,worn) {
     const raw=l.raw, format=l.format, prefix=l.prefix;
     const line=document.createElement('div');
     line.className='ink-line'; line.dataset.index=String(index);
-    if(!prefix)estimate(line,raw.length);
     if(prefix) {
       line.classList.add('ink-block-'+prefix.kind);
       if(prefix.kind==='heading') line.style.setProperty('--heading-scale',String(l.scale));
@@ -410,7 +397,6 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
     writeSelection();scroller.scrollTop=oldScroll;
   }
   function reflow() {
-    columns=0;
     const height=scroller.clientHeight, width=scroller.clientWidth;
     const inset=topInset(height,lineHeight(),settings.paperStartPosition);
     const result={resized:height!==viewport.height||width!==viewport.width,insetDelta:inset-viewport.inset,offset:scroller.scrollTop};
