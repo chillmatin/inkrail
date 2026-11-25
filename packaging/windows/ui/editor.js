@@ -289,14 +289,8 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
       if(prefix.kind==='heading') line.style.setProperty('--heading-scale',String(l.scale));
       if(prefix.kind==='list') line.style.setProperty('--marker-width',prefix.source.length+'ch');
     }
-    appendSegments(line,l,0,worn);
-    if(!raw) line.append(document.createElement('br'));
-    return line;
-  }
-  function appendSegments(dest,l,from,worn) {
-    const raw=l.raw, format=l.format, prefix=l.prefix;
     const mark=prefix?.kind==='heading'?prefix.source.length:0;
-    for(let j=from;j<raw.length;) {
+    for(let j=0;j<raw.length;) {
       const start=j++,mask=format[start],hidden=start<mark;
       while(j<raw.length&&format[j]===mask&&(j<mark)===hidden) j++;
       const segment=document.createElement('span');
@@ -306,52 +300,10 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
       if(worn&&!hidden)pressRange(segment,l.start+start,l.start+j,l);
       else if(!hidden)flatRun(segment,value);
       else segment.textContent=value;
-      dest.append(segment);
+      line.append(segment);
     }
-  }
-  // Typing in a long paragraph rebuilds only its end. Earlier inked letters
-  // keep their nodes and, on the roller, their measured rows, so the engine
-  // lays out the last rows again instead of the whole paragraph.
-  function patchLine(line,previous,l,worn) {
-    const raw=l.raw, format=l.format;
-    if(!worn||l.prefix||previous.prefix||raw.length<256||!previous.raw.length)return false;
-    const n=Math.min(raw.length,previous.raw.length);
-    let same=0;
-    while(same<n&&raw.charCodeAt(same)===previous.raw.charCodeAt(same)&&format[same]===previous.format[same])same++;
-    const ascii=i=>raw.charCodeAt(i)<128&&raw.charCodeAt(i-1)<128;
-    const entry=rolledParagraphs.get(line);
-    if(entry) {
-      // Keep whole visual rows: everything before the row above the edit.
-      // That row starts at a break the edit cannot move as long as its first
-      // word ends before the edit.
-      const wraps=[...line.children];
-      let at=0,w=0;
-      const starts=wraps.map(wrap=>{const s=at;at+=wrap.textContent.length;return s;});
-      while(w+1<wraps.length&&starts[w+1]<=same)w++;
-      const k=w-1, from=starts[k], space=raw.indexOf(' ',from);
-      if(k<1||!(wraps[k].inkRow>=0)||space<0||space>=same||!ascii(from))return false;
-      for(const wrap of wraps.slice(k)){curvedLines.delete(wrap);wrap.remove();}
-      const tail=document.createElement('div');
-      tail.className='ink-roll-rest';tail.dir=entry.direction;tail.style.textIndent='0';tail.inkRow=wraps[k].inkRow;
-      appendSegments(tail,l,from,worn);line.append(tail);
-      entry.tail=tail;entry.native=null;entry.projected=entry.projected.filter(row=>row.isConnected);
-      return true;
-    }
-    // Unrolled: cut after the last unchanged letter, away from the edit so
-    // neighbouring strikes and clusters are unaffected.
-    let cut=same-32;
-    while(cut>=64&&!ascii(cut))cut--;
-    if(cut<64)return false;
-    const walk=document.createTreeWalker(line,NodeFilter.SHOW_TEXT);
-    let remaining=cut,t;
-    while((t=walk.nextNode())&&remaining>=t.length)remaining-=t.length;
-    if(!t)return false;
-    const range=document.createRange();
-    if(t.parentElement.classList.contains('ink-press'))range.setStartBefore(t.parentElement);else range.setStart(t,remaining);
-    range.setEnd(line,line.childNodes.length);range.deleteContents();
-    if(line.lastChild&&!line.lastChild.textContent)line.lastChild.remove();
-    appendSegments(line,l,cut,worn);
-    return true;
+    if(!raw) line.append(document.createElement('br'));
+    return line;
   }
   // Build the full flat impression independently of the scroll and roller caches.
   function printContent() {
@@ -388,8 +340,6 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
         (worn&&(previous.start!==l.start||previous.sourceDelta!==l.sourceDelta))||format.length!==previous.format.length||format.some((m,k)=>m!==previous.format[k]);
       l.raw=raw;l.opt=opt;l.format=changed?format.slice():previous.format;
       if(!changed) continue;
-      if(!force&&existing&&previous&&previous.opt===opt&&previous.start===l.start&&previous.sourceDelta===l.sourceDelta&&
-        previous.literal===l.literal&&patchLine(existing,previous,l,worn)) continue;
       const line=renderLine(l,i,worn);
       if(existing) {curvedLines.delete(existing);existing.replaceWith(line);} else node.append(line);
     }
@@ -468,33 +418,9 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
     function preserveSelection() {
       if(!reparented) {saved=readSelection();stripLongInk();reparented=true;}
     }
-    // A patched paragraph has no untouched original nodes; its rows hold the
-    // current text in order, so unwrapping them restores the flat paragraph.
     function restore(paragraph,entry) {
-      preserveSelection();
-      paragraph.replaceChildren(...(entry.native??[...paragraph.children].flatMap(wrap=>[...wrap.childNodes])));
+      preserveSelection();paragraph.replaceChildren(...entry.native);
       rolledParagraphs.delete(paragraph);
-    }
-    // Split a container's laid-out text into one block per visual row.
-    function splitRows(container,pieces,source,direction,rowBase,indent) {
-      const fragment=document.createDocumentFragment(), projected=[], range=document.createRange();
-      for(const part of pieces) {
-        const wrap=document.createElement('div');
-        wrap.className=part.row<0?'ink-roll-rest':'ink-roll-visual-line';
-        wrap.dir=direction;wrap.inkRow=part.row<0?-1:rowBase+part.row;
-        if(part.start||!indent)wrap.style.textIndent='0';
-        range.setStart(...source.at(part.start));range.setEnd(...source.at(part.end));
-        let content=range.cloneContents(), ancestor=range.commonAncestorContainer;
-        // A row boundary at the start of a letter clones that letter's empty shell.
-        for(const empty of content.querySelectorAll('span'))if(!empty.textContent&&!empty.querySelector('br'))empty.remove();
-        if(ancestor.nodeType!==1)ancestor=ancestor.parentElement;
-        for(;ancestor&&ancestor!==container;ancestor=ancestor.parentElement) {
-          const shell=ancestor.cloneNode(false);shell.append(content);content=shell;
-        }
-        wrap.append(content);fragment.append(wrap);
-        if(part.row>=0)projected.push(wrap);
-      }
-      return {fragment,projected};
     }
     function setTransform(line,top,h){
       const dy=projection.y(top)-top;
@@ -530,30 +456,36 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
         if(rows===1&&!rolledParagraphs.has(paragraph)) {setTransform(paragraph,top,paragraph.offsetHeight);continue;}
         const firstRow=Math.max(0,Math.floor((-projection.bend-top-leading)/em));
         const lastRow=Math.min(rows-1,Math.ceil((projection.bend-top-leading)/em));
-        const base=[paragraph.clientWidth,em,settings.writingFont].join(':'), key=base+':'+firstRow+':'+lastRow;
+        const key=[paragraph.clientWidth,em,firstRow,lastRow,settings.writingFont].join(':');
         let entry=rolledParagraphs.get(paragraph);
-        const tail=entry?.tail;
-        if(tail&&!selectingByPointer&&entry.base===base&&firstRow>=entry.firstRow&&tail.inkRow>=firstRow&&tail.isConnected) {
-          // Only the end of the paragraph changed: measure and split that part.
-          preserveSelection();
-          const {pieces,source}=nativeVisualRows(tail,0,lastRow-tail.inkRow,em,0);
-          const {fragment,projected}=splitRows(tail,pieces,source,entry.direction,tail.inkRow,false);
-          tail.replaceWith(fragment);
-          entry.projected.push(...projected);entry.tail=null;entry.key=key;
-        } else if(entry?.key!==key&&!selectingByPointer||tail&&!selectingByPointer) {
+        if(entry?.key!==key&&!selectingByPointer) {
           if(entry)restore(paragraph,entry);
           paragraph.style.removeProperty('transform');curvedLines.delete(paragraph);
           preserveSelection();
           const {pieces,source}=nativeVisualRows(paragraph,firstRow,lastRow,em,leading);
-          const native=[...paragraph.childNodes];
+          const native=[...paragraph.childNodes], fragment=document.createDocumentFragment(), projected=[];
           // Chromium's plaintext paragraph direction must not be re-derived
           // from each wrapped row. Resolve its first strong letter once.
           paragraph.dir='auto';
           const direction=getComputedStyle(paragraph).direction;
           paragraph.removeAttribute('dir');
-          const {fragment,projected}=splitRows(paragraph,pieces,source,direction,0,true);
+          const range=document.createRange();
+          for(const part of pieces) {
+            const wrap=document.createElement('div');
+            wrap.className=part.row<0?'ink-roll-rest':'ink-roll-visual-line';
+            wrap.dir=direction;
+            if(part.start)wrap.style.textIndent='0';
+            range.setStart(...source.at(part.start));range.setEnd(...source.at(part.end));
+            let content=range.cloneContents(), ancestor=range.commonAncestorContainer;
+            if(ancestor.nodeType!==1)ancestor=ancestor.parentElement;
+            for(;ancestor&&ancestor!==paragraph;ancestor=ancestor.parentElement) {
+              const shell=ancestor.cloneNode(false);shell.append(content);content=shell;
+            }
+            wrap.append(content);fragment.append(wrap);
+            if(part.row>=0)projected.push(wrap);
+          }
           paragraph.replaceChildren(fragment);
-          entry={key,base,firstRow,direction,native,projected,tail:null};rolledParagraphs.set(paragraph,entry);
+          entry={key,native,projected};rolledParagraphs.set(paragraph,entry);
         }
         for(const row of entry?.projected??[]) {
           const rowTop=row.offsetTop-offset;
@@ -1006,7 +938,7 @@ export function mountEditor(surface, {onChange=()=>{}, onMove=()=>{}, onSound=()
   document.fonts.addEventListener('loadingdone', () => {
     if (settings.writingFont !== 'courier') return;
     // Wrapped roller rows may have been measured with the temporary font.
-    for (const entry of rolledParagraphs.values()) entry.key = entry.base = null;
+    for (const entry of rolledParagraphs.values()) entry.key = null;
     inkKey = '';
     scheduleMove();
   }, options);

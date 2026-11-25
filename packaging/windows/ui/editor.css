@@ -44,9 +44,7 @@
 .ink-line.ink-block-quote{padding-inline-start:1em}
 .ink-line.ink-block-list{padding-inline-start:calc(.5em + var(--marker-width));text-indent:calc(-1 * var(--marker-width))}
 .ink-bold{font-weight:700}.ink-italic{font-style:italic}.ink-underline{text-decoration:underline}.ink-strikethrough{text-decoration:line-through}.ink-underline.ink-strikethrough{text-decoration:underline line-through}.ink-code{background-color:rgb(var(--ink-tint,41 43 38)/.09)}
-/* Opposite inline margins nudge the strike without moving its neighbours. Unlike
-   relative positioning they do not give every letter its own paint layer. */
-.ink-press{color:rgb(var(--ink-tint) / calc(var(--ink-pressure) * var(--strike)));margin-inline:var(--press-x,0px) calc(-1 * var(--press-x,0px))}
+.ink-press{color:rgb(var(--ink-tint) / calc(var(--ink-pressure) * var(--strike)));position:relative;left:var(--press-x,0px)}
 .ink-editor-placeholder{position:absolute;pointer-events:none;user-select:none;z-index:1;font-family:var(--ink-font,monospace);font-size:var(--ink-font-size,20px);font-weight:var(--ink-weight,400);line-height:1.15;color:rgb(124 127 109 / .43);white-space:nowrap;max-width:calc(100% - 24px);overflow:hidden}
 .ink-roll-visual-line,.ink-roll-rest{display:block;unicode-bidi:isolate;min-height:1lh}
 .ink-editor.ink-editor-sealed{min-height:0;padding-bottom:0!important}
